@@ -2,9 +2,15 @@
 name = "gitstare"
 version = "0.1.0"
 edition = "2021"
-description = "A git-aware multi-repo dashboard for your terminal"
+description = "A git-aware multi-repo dashboard for your terminal. One command, every repo, instant status."
 license = "MIT"
 repository = "https://github.com/matteso1/gitstare"
+homepage = "https://github.com/matteso1/gitstare"
+readme = "README.md"
+keywords = ["git", "tui", "terminal", "dashboard", "ratatui"]
+categories = ["command-line-utilities", "development-tools"]
+authors = ["Nils Matteson"]
+exclude = ["test_repos/", "tests/setup_test_repos.sh"]
 
 [dependencies]
 ratatui = "0.29"
