@@ -1,8 +1,8 @@
 mod detail;
 mod overview;
 
-use crate::config::Config;
-use crate::git::RepoInfo;
+use gitstare::config::Config;
+use gitstare::git::RepoInfo;
 use anyhow::Result;
 use crossterm::{
     event::{self, Event, KeyCode, KeyEventKind, KeyModifiers},

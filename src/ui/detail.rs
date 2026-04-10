@@ -1,9 +1,10 @@
 use super::App;
-use crate::git::RepoInfo;
+use gitstare::git::RepoInfo;
+use gitstare::theme;
 use chrono::{DateTime, Utc};
 use ratatui::{
     prelude::*,
-    widgets::{Block, Borders, List, ListItem, Paragraph, Wrap},
+    widgets::{Block, BorderType, List, ListItem, Padding, Paragraph, Wrap},
 };
 
 pub fn draw(f: &mut Frame, app: &App) {
@@ -12,20 +13,36 @@ pub fn draw(f: &mut Frame, app: &App) {
         None => return,
     };
 
-    let chunks = Layout::default()
-        .direction(Direction::Vertical)
+    // Fill background
+    f.render_widget(Block::default().style(Style::default().bg(theme::BASE)), f.area());
+
+    // Outer margin
+    let outer = Layout::default()
+        .direction(Direction::Horizontal)
         .constraints([
-            Constraint::Length(5),  // repo header
-            Constraint::Length(10), // branches
-            Constraint::Min(0),    // commits
-            Constraint::Length(1),  // footer
+            Constraint::Length(1),
+            Constraint::Min(0),
+            Constraint::Length(1),
         ])
         .split(f.area());
 
-    draw_repo_header(f, chunks[0], repo);
-    draw_branches(f, chunks[1], repo, app);
-    draw_commits(f, chunks[2], repo, app);
-    draw_footer(f, chunks[3]);
+    let chunks = Layout::default()
+        .direction(Direction::Vertical)
+        .constraints([
+            Constraint::Length(1),  // top margin
+            Constraint::Length(6),  // repo header
+            Constraint::Length(1),  // spacer
+            Constraint::Percentage(35), // branches
+            Constraint::Length(1),  // spacer
+            Constraint::Min(0),    // commits
+            Constraint::Length(1),  // footer
+        ])
+        .split(outer[1]);
+
+    draw_repo_header(f, chunks[1], repo);
+    draw_branches(f, chunks[3], repo);
+    draw_commits(f, chunks[5], repo, app);
+    draw_footer(f, chunks[6]);
 }
 
 fn draw_repo_header(f: &mut Frame, area: Rect, repo: &RepoInfo) {
@@ -35,36 +52,69 @@ fn draw_repo_header(f: &mut Frame, area: Rect, repo: &RepoInfo) {
         repo.remotes.join(", ")
     };
 
-    let info = format!(
-        "Path:    {}\n\
-         Branch:  {} | Status: {} | {}\n\
-         Remote:  {}\n\
-         Diff:    {} files changed, +{} -{} ",
-        repo.path.display(),
-        repo.branch,
-        repo.status_string(),
-        repo.ahead_behind_string(),
-        remote_str,
-        repo.diff_stat.files_changed,
-        repo.diff_stat.insertions,
-        repo.diff_stat.deletions,
-    );
+    let status_color = if repo.is_clean() { theme::GREEN } else { theme::YELLOW };
+    let ab_color = if repo.behind > 0 {
+        theme::RED
+    } else if repo.ahead > 0 {
+        theme::YELLOW
+    } else {
+        theme::GREEN
+    };
 
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::DarkGray))
+    let lines = vec![
+        Line::from(vec![
+            Span::styled("  Path     ", Style::default().fg(theme::SUBTEXT)),
+            Span::styled(
+                repo.path.to_string_lossy().to_string(),
+                Style::default().fg(theme::TEXT),
+            ),
+        ]),
+        Line::from(vec![
+            Span::styled("  Branch   ", Style::default().fg(theme::SUBTEXT)),
+            Span::styled(&repo.branch, Style::default().fg(theme::BLUE).bold()),
+            Span::styled("  \u{2022}  ", Style::default().fg(theme::OVERLAY)),
+            Span::styled(repo.status_string(), Style::default().fg(status_color)),
+            Span::styled("  \u{2022}  ", Style::default().fg(theme::OVERLAY)),
+            Span::styled(repo.ahead_behind_string(), Style::default().fg(ab_color)),
+        ]),
+        Line::from(vec![
+            Span::styled("  Remote   ", Style::default().fg(theme::SUBTEXT)),
+            Span::styled(remote_str, Style::default().fg(theme::SUBTEXT)),
+        ]),
+        Line::from(vec![
+            Span::styled("  Changes  ", Style::default().fg(theme::SUBTEXT)),
+            Span::styled(
+                format!("{} files", repo.diff_stat.files_changed),
+                Style::default().fg(theme::TEXT),
+            ),
+            Span::styled("  ", Style::default()),
+            Span::styled(
+                format!("+{}", repo.diff_stat.insertions),
+                Style::default().fg(theme::GREEN),
+            ),
+            Span::styled("  ", Style::default()),
+            Span::styled(
+                format!("-{}", repo.diff_stat.deletions),
+                Style::default().fg(theme::RED),
+            ),
+        ]),
+    ];
+
+    let block = Block::bordered()
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(theme::SURFACE))
         .title(Span::styled(
             format!(" {} ", repo.name),
-            Style::default().fg(Color::Cyan).bold(),
-        ));
+            Style::default().fg(theme::LAVENDER).bold(),
+        ))
+        .padding(Padding::vertical(0))
+        .style(Style::default().bg(theme::BASE));
 
-    let para = Paragraph::new(info)
-        .block(block)
-        .wrap(Wrap { trim: true });
+    let para = Paragraph::new(lines).block(block).wrap(Wrap { trim: true });
     f.render_widget(para, area);
 }
 
-fn draw_branches(f: &mut Frame, area: Rect, repo: &RepoInfo, _app: &App) {
+fn draw_branches(f: &mut Frame, area: Rect, repo: &RepoInfo) {
     let items: Vec<ListItem> = repo
         .branches
         .iter()
@@ -73,27 +123,39 @@ fn draw_branches(f: &mut Frame, area: Rect, repo: &RepoInfo, _app: &App) {
                 Some(ts) => relative_time(ts),
                 None => "never".into(),
             };
-            let head_marker = if b.is_head { "* " } else { "  " };
-            let style = if b.is_head {
-                Style::default().fg(Color::Cyan).bold()
+
+            let line = if b.is_head {
+                Line::from(vec![
+                    Span::styled("  \u{25CF} ", Style::default().fg(theme::BLUE)),
+                    Span::styled(
+                        format!("{:<30}", b.name),
+                        Style::default().fg(theme::BLUE).bold(),
+                    ),
+                    Span::styled(age, Style::default().fg(theme::SUBTEXT)),
+                ])
             } else {
-                Style::default().fg(Color::White)
+                Line::from(vec![
+                    Span::styled("    ", Style::default()),
+                    Span::styled(
+                        format!("{:<30}", b.name),
+                        Style::default().fg(theme::TEXT),
+                    ),
+                    Span::styled(age, Style::default().fg(theme::SUBTEXT)),
+                ])
             };
-            ListItem::new(format!(
-                "{}{:<30} {}",
-                head_marker, b.name, age
-            ))
-            .style(style)
+
+            ListItem::new(line)
         })
         .collect();
 
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::DarkGray))
+    let block = Block::bordered()
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(theme::SURFACE))
         .title(Span::styled(
             format!(" Branches ({}) ", repo.branches.len()),
-            Style::default().fg(Color::Cyan).bold(),
-        ));
+            Style::default().fg(theme::LAVENDER).bold(),
+        ))
+        .style(Style::default().bg(theme::BASE));
 
     let list = List::new(items).block(block);
     f.render_widget(list, area);
@@ -106,32 +168,63 @@ fn draw_commits(f: &mut Frame, area: Rect, repo: &RepoInfo, app: &App) {
         .skip(app.detail_scroll)
         .map(|c| {
             let age = relative_time(c.timestamp);
-            ListItem::new(format!(
-                " {} {:<8} {:<50} {}",
-                c.hash,
-                age,
-                truncate(&c.message, 50),
-                c.author
-            ))
-            .style(Style::default().fg(Color::White))
+            let line = Line::from(vec![
+                Span::styled("  ", Style::default()),
+                Span::styled(&c.hash, Style::default().fg(theme::MAUVE)),
+                Span::styled("  ", Style::default()),
+                Span::styled(
+                    format!("{:<6}", age),
+                    Style::default().fg(theme::SUBTEXT),
+                ),
+                Span::styled("  ", Style::default()),
+                Span::styled(
+                    truncate(&c.message, 50),
+                    Style::default().fg(theme::TEXT),
+                ),
+                Span::styled("  ", Style::default()),
+                Span::styled(&c.author, Style::default().fg(theme::SUBTEXT)),
+            ]);
+            ListItem::new(line)
         })
         .collect();
 
-    let block = Block::default()
-        .borders(Borders::ALL)
-        .border_style(Style::default().fg(Color::DarkGray))
+    let block = Block::bordered()
+        .border_type(BorderType::Rounded)
+        .border_style(Style::default().fg(theme::SURFACE))
         .title(Span::styled(
             format!(" Commits ({}) ", repo.recent_commits.len()),
-            Style::default().fg(Color::Cyan).bold(),
-        ));
+            Style::default().fg(theme::LAVENDER).bold(),
+        ))
+        .style(Style::default().bg(theme::BASE));
 
     let list = List::new(items).block(block);
     f.render_widget(list, area);
 }
 
 fn draw_footer(f: &mut Frame, area: Rect) {
-    let help = " Esc/Backspace: back | j/k: scroll commits | q: quit";
-    let footer = Paragraph::new(help).style(Style::default().fg(Color::DarkGray));
+    let keys: Vec<(&str, &str)> = vec![
+        ("Esc", "back"),
+        ("j/k", "scroll"),
+        ("q", "quit"),
+    ];
+
+    let mut spans = vec![Span::raw(" ")];
+    for (i, (key, desc)) in keys.iter().enumerate() {
+        spans.push(Span::styled(
+            format!(" {} ", key),
+            Style::default().fg(theme::BASE).bg(theme::SUBTEXT).bold(),
+        ));
+        spans.push(Span::styled(
+            format!(" {}", desc),
+            Style::default().fg(theme::SUBTEXT),
+        ));
+        if i < keys.len() - 1 {
+            spans.push(Span::styled("  ", Style::default()));
+        }
+    }
+
+    let footer = Paragraph::new(Line::from(spans))
+        .style(Style::default().bg(theme::BASE));
     f.render_widget(footer, area);
 }
 

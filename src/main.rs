@@ -1,11 +1,8 @@
-mod cache;
-mod config;
-mod git;
-mod scanner;
 mod ui;
 
 use anyhow::Result;
 use clap::Parser;
+use gitstare::{cache, config, git, scanner};
 use std::path::PathBuf;
 
 #[derive(Parser)]
