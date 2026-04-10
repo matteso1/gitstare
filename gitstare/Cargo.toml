@@ -1,0 +1,22 @@
+[package]
+name = "gitstare"
+version = "0.1.0"
+edition = "2021"
+description = "A git-aware multi-repo dashboard for your terminal"
+license = "MIT"
+repository = "https://github.com/matteso1/gitstare"
+
+[dependencies]
+ratatui = "0.29"
+crossterm = "0.28"
+git2 = "0.19"
+rusqlite = { version = "0.32", features = ["bundled"] }
+walkdir = "2"
+clap = { version = "4", features = ["derive"] }
+rayon = "1.10"
+directories = "6"
+chrono = "0.4"
+toml = "0.8"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+anyhow = "1"
